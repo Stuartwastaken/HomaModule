@@ -413,9 +413,7 @@ def scan(file: str) -> list[str]:
                         print('%s:%d: stripping creates empty block' %
                                 (file, line_num), file=sys.stderr)
                         exit_code = 1
-                    # Keep braces before "else": a nested "if" could take it.
-                    if (statements_in_block == 1 and
-                            not pline.startswith('} else')):
+                    if statements_in_block == 1:
                         slines[open_index] = remove_open(slines[open_index])
                         line = remove_close(line)
                         if not line.strip():
