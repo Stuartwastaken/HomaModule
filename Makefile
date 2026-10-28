@@ -83,7 +83,7 @@ net-next: $(HOMA_TARGET) $(CP_TARGETS) $(LINUX_SRC_DIR)/include/uapi/linux/homa.
 $(HOMA_TARGET):
 	mkdir $(HOMA_TARGET)
 $(HOMA_TARGET)/%: % util/strip.py
-	util/strip.py $< > $@
+	util/strip.py $(STRIP_FLAGS) $< > $@
 $(HOMA_TARGET)/%.txt: %.txt
 	cp $< $@
 $(HOMA_TARGET)/Makefile: Makefile.upstream
@@ -91,7 +91,7 @@ $(HOMA_TARGET)/Makefile: Makefile.upstream
 $(HOMA_TARGET)/strip_decl.py: util/strip_decl.py
 	cp $< $@
 $(LINUX_SRC_DIR)/include/uapi/linux/homa.h: homa.h util/strip.py
-	util/strip.py $< > $@
+	util/strip.py $(STRIP_FLAGS) $< > $@
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(shell pwd) clean

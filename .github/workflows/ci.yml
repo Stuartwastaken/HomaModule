@@ -42,3 +42,16 @@ jobs:
       - name: Unit tests (IPv4)
         if: ${{ !cancelled() }}
         run: cd test && ./unit --ipv4
+
+      # Build the files that util/strip.py writes for upstreaming, which
+      # nothing else here compiles. --kernel keeps the code for this kernel
+      # in LINUX_VERSION_CODE blocks so that they build with it. -Werror
+      # makes stripping mistakes such as a dangling "else" fail.
+      - name: Build homa.ko from util/strip.py output
+        if: ${{ !cancelled() }}
+        run: |
+          out=$RUNNER_TEMP/net-next
+          mkdir -p $out/net $out/include/uapi/linux
+          make net-next LINUX_SRC_DIR=$out "STRIP_FLAGS=--kernel $LINUX_VERSION"
+          make -C $KDIR M=$out/net/homa CONFIG_HOMA=m KBUILD_MODPOST_WARN=1 \
+            KCFLAGS="-I$out/include/uapi -Werror" modules
