@@ -7,11 +7,16 @@ This script is used to copy information from the Homa GitHub repo to
 a Linux kernel repo, removing information that doesn't belong in the
 official kernel version (such as calls to tt_record).
 
-Usage: strip.py file file file ... destdir
+Usage: strip.py [--kernel X.Y.Z] file file file ... destdir
 
 Each of the files will be read, stripped as appropriate, and copied to a
 file by the same name in destdir. If there is only a single file and no
 destdir, then the stripped file is printed on standard output.
+
+Normally only the #else code of an '#if LINUX_VERSION_CODE' block is kept.
+With --kernel, the code for that Linux version is kept instead, so that the
+stripped files can be compiled against the kernel that the main branch is
+built with (for testing only; this is not what goes upstream).
 
 The following code is removed automatically:
   * Calls to timetracing, such as tt_record*
@@ -141,6 +146,26 @@ def blank_next_ok(line: str) -> bool:
         return False
     return True
 
+# Linux version for --kernel, as a (major, minor, patch) tuple, or None.
+kernel = None
+
+def version_test(file: str, line_num: int, line: str) -> bool:
+    """
+    Return the value of an '#if LINUX_VERSION_CODE' test for kernel.
+    """
+
+    global exit_code
+
+    m = re.match(r'#if LINUX_VERSION_CODE\s*(<|>=)\s*'
+                 r'KERNEL_VERSION\((\d+),\s*(\d+),\s*(\d+)\)', line)
+    if not m:
+        print('%s:%d: can\'t evaluate %s' % (file, line_num, line.strip()),
+              file=sys.stderr)
+        exit_code = 1
+        return False
+    version = tuple(int(m.group(i)) for i in range(2, 5))
+    return (kernel < version) == (m.group(1) == '<')
+
 def scan(file: str) -> list[str]:
     """
     Read a file, remove information that shouldn't appear in the Linux kernel
@@ -178,6 +203,10 @@ def scan(file: str) -> list[str]:
     # 'else':  We are in the middle of an '#else' clause for an
     #          '#if LINUX_VERSION_CODE' (this code should remain)
     in_version = None
+
+    # Which part of the current '#if LINUX_VERSION_CODE' block to keep:
+    # 'if' or 'else'.
+    keep_version = 'else'
 
     # Array of lines containing the stripped version of the file
     slines = []
@@ -354,10 +383,14 @@ def scan(file: str) -> list[str]:
             if line.startswith('#else'):
                 in_version = 'else'
                 continue
-            if in_version == 'if':
+            if in_version != keep_version:
                 continue
         elif line.startswith('#if LINUX_VERSION_CODE'):
             in_version = 'if'
+            if kernel and version_test(file, line_num, line):
+                keep_version = 'if'
+            else:
+                keep_version = 'else'
             if not blank_next_ok(slines[-1]):
                 delete_empty_line = True
             continue
@@ -410,15 +443,20 @@ def scan(file: str) -> list[str]:
 
 if __name__ == '__main__':
     f = sys.stdin
-    if len(sys.argv) < 2:
-        print('Usage: strip.py [--alt] file [file ... destdir]', file=sys.stderr)
+    args = sys.argv[1:]
+    if len(args) > 1 and args[0] == '--kernel':
+        kernel = tuple(int(x) for x in args[1].split('.')[:3])
+        args = args[2:]
+    if len(args) < 1:
+        print('Usage: strip.py [--kernel X.Y.Z] file [file ... destdir]',
+              file=sys.stderr)
         exit(1)
-    if len(sys.argv) == 2:
-        for line in scan(sys.argv[1]):
+    if len(args) == 1:
+        for line in scan(args[0]):
             print(line, end='')
     else:
-        for file in sys.argv[1:-1]:
-            dst_file = '%s/%s' % (sys.argv[-1], file)
+        for file in args[:-1]:
+            dst_file = '%s/%s' % (args[-1], file)
             print('Stripping %s into %s' % (file, dst_file))
             slines = scan(file)
             dst = open(dst_file, 'w')
