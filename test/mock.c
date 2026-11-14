@@ -765,6 +765,9 @@ int inet6_release(struct socket *sock)
 	return 0;
 }
 
+void inet6_sock_destruct(struct sock *sk)
+{}
+
 void inet6_unregister_protosw(struct inet_protosw *p)
 {
 	UNIT_LOG("; ", "inet6_unregister_protosw %u", p->protocol);
@@ -834,6 +837,9 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
 	return 0;
 }
+
+void inet_sock_destruct(struct sock *sk)
+{}
 
 void inet_unregister_protosw(struct inet_protosw *p)
 {
@@ -2807,6 +2813,43 @@ void mock_sock_put(struct sock *sk)
 }
 
 /**
+ * mock_sock_tracked() - Return true if @hsk is in mock_socks.
+ * @hsk:          Socket of interest.
+ */
+static bool mock_sock_tracked(struct homa_sock *hsk)
+{
+	int i;
+
+	for (i = 0; i < mock_num_socks; i++) {
+		if (mock_socks[i] == hsk)
+			return true;
+	}
+	return false;
+}
+
+/**
+ * mock_sock_destruct() - Invoke a socket's sk_destruct function, as the
+ * kernel does when the last reference to the socket is released, and
+ * stop tracking the socket (sockets still tracked at the end of a test
+ * are destructed by mock_teardown).
+ * @hsk:          Socket to destruct.
+ */
+void mock_sock_destruct(struct homa_sock *hsk)
+{
+	int i;
+
+	for (i = 0; i < mock_num_socks; i++) {
+		if (mock_socks[i] == hsk) {
+			mock_num_socks--;
+			mock_socks[i] = mock_socks[mock_num_socks];
+			break;
+		}
+	}
+	if (hsk->sock.sk_destruct)
+		hsk->sock.sk_destruct(&hsk->sock);
+}
+
+/**
  * mock_sock_init() - Constructor for sockets; initializes the Homa-specific
  * part, and mocks out the non-Homa-specific parts.
  * @hsk:          Storage area to be initialized.
@@ -2822,6 +2865,9 @@ int mock_sock_init(struct homa_sock *hsk, struct homa_net *hnet, int port)
 	int saved_port;
 	int err = 0;
 
+	/* If @hsk is being reused, the previous socket is gone. */
+	if (mock_sock_tracked(hsk))
+		mock_sock_destruct(hsk);
 	if (mock_num_socks < MOCK_MAX_SOCKS) {
 		mock_socks[mock_num_socks] = hsk;
 		mock_num_socks++;
@@ -2849,8 +2895,10 @@ int mock_sock_init(struct homa_sock *hsk, struct homa_net *hnet, int port)
 	hsk->is_server = true;
 	if (port != 0)
 		hnet->prev_default_port = saved_port;
-	if (err != 0)
+	if (err != 0) {
+		mock_sock_destruct(hsk);
 		return err;
+	}
 	if (port != 0 && port < mock_min_default_port)
 		homa_sock_bind(hnet, hsk, port);
 	hsk->inet.pinet6 = &hsk_pinfo;
@@ -2885,6 +2933,11 @@ void mock_teardown(void)
 {
 	int count, i;
 
+	/* Sockets that are still tracked must still exist (e.g. they
+	 * are part of a fixture).
+	 */
+	while (mock_num_socks > 0)
+		mock_sock_destruct(mock_socks[0]);
 	mock_rcu_free();
 
 	cpu_number = 1;

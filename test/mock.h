@@ -346,6 +346,7 @@ struct sk_buff *
 int         mock_skb_count(void);
 void        mock_sock_destroy(struct homa_sock *hsk,
 			      struct homa_socktab *socktab);
+void        mock_sock_destruct(struct homa_sock *hsk);
 void        mock_sock_hold(struct sock *sk);
 int         mock_sock_init(struct homa_sock *hsk, struct homa_net *hnet,
 			   int port);

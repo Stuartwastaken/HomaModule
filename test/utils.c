@@ -458,6 +458,7 @@ void unit_sock_destroy(struct homa_sock *hsk)
 {
 	homa_sock_shutdown(hsk);
 	homa_sock_destroy(&hsk->sock);
+	mock_sock_destruct(hsk);
 }
 
 /**
