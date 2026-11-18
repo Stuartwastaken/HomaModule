@@ -30,6 +30,7 @@ int homa_tx_pool_init(struct homa *homa)
 	u64 min_kb;
 	int i, nid;
 
+	homa->tx_page_frees_per_sec = 1000;
 	min_kb = 3 * HOMA_MAX_MESSAGE_LENGTH;
 	do_div(min_kb, 1000);
 	homa->tx_page_pool_min_kb = min_kb;
