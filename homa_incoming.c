@@ -222,6 +222,11 @@ enum skb_drop_reason homa_add_packet(struct homa_rpc *rpc, struct sk_buff *skb)
 		goto ignore;
 	}
 
+	if (length == 0) {
+		reason = SKB_DROP_REASON_PKT_TOO_SMALL;
+		goto ignore;
+	}
+
 	if (start == rpc->msgin.recv_end) {
 		/* Common case: packet is sequential. */
 		rpc->msgin.recv_end += length;
