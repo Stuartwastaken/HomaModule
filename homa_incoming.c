@@ -725,16 +725,23 @@ void homa_data_pkt(struct sk_buff *skb, struct homa_rpc *rpc)
 	rpc->silent_ticks = 0;
 
 	if (rpc->state != RPC_INCOMING && homa_is_client(rpc->id)) {
+		int err;
+
 		if (unlikely(rpc->state != RPC_OUTGOING))
 			goto handle_ack;
 		INC_METRIC(responses_received, 1);
 		rpc->state = RPC_INCOMING;
 #ifndef __STRIP__ /* See strip.py */
-		if (homa_message_in_init(rpc, ntohl(h->msg_length),
-					 ntohl(h->msg_length)) != 0) {
+		err = homa_message_in_init(rpc, ntohl(h->msg_length),
+					   ntohl(h->msg_length));
 #else /* See strip.py */
-		if (homa_message_in_init(rpc, ntohl(h->msg_length)) != 0) {
+		err = homa_message_in_init(rpc, ntohl(h->msg_length));
 #endif /* See strip.py */
+		if (err != 0) {
+			/* The response can't be received, and homa_timer
+			 * won't time out this RPC, so abort it.
+			 */
+			homa_rpc_abort(rpc, err);
 			drop_reason = SKB_DROP_REASON_NOMEM;
 			goto handle_ack;
 		}
