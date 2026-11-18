@@ -484,6 +484,21 @@ TEST_F(homa_incoming, homa_add_packet__packet_overlaps_message_end)
 	kfree_skb(skb);
 	EXPECT_EQ(0, skb_queue_len(&crpc->msgin.packets));
 }
+TEST_F(homa_incoming, homa_add_packet__no_data)
+{
+	struct homa_rpc *crpc = unit_client_rpc(&self->hsk,
+			UNIT_OUTGOING, self->client_ip, self->server_ip,
+			self->server_port, 99, 1000, 1000);
+	struct sk_buff *skb;
+
+	homa_message_in_init(crpc, 10000, 0);
+	unit_log_clear();
+	skb = mock_skb_alloc(self->client_ip, self->server_ip,
+			     &self->data.common, 0, 0);
+	EXPECT_EQ(SKB_DROP_REASON_PKT_TOO_SMALL, homa_add_packet(crpc, skb));
+	kfree_skb(skb);
+	EXPECT_EQ(0, skb_queue_len(&crpc->msgin.packets));
+}
 TEST_F(homa_incoming, homa_add_packet__sequential_packets)
 {
 	struct homa_rpc *crpc = unit_client_rpc(&self->hsk,
