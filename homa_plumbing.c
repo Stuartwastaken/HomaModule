@@ -2176,7 +2176,7 @@ int homa_timer_main(void *transport)
 	nsec = 1000000;                   /* 1 ms */
 	tick_interval = ns_to_ktime(nsec);
 	while (1) {
-		set_current_state(TASK_UNINTERRUPTIBLE);
+		set_current_state(TASK_IDLE);
 		if (!kthread_should_stop()) {
 			hrtimer_start(&hrtimer, tick_interval,
 				      HRTIMER_MODE_REL);
