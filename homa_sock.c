@@ -237,6 +237,7 @@ int homa_sock_init(struct homa_sock *hsk)
 	/* Initialize fields outside the Homa part. */
 	hsk->sock.sk_sndbuf = homa->wmem_max;
 	sock_set_flag(&hsk->inet.sk, SOCK_RCU_FREE);
+	hsk->sock.sk_destruct = homa_sock_destruct;
 	IF_NO_STRIP(homa_hijack_sock_init(hsk));
 
 	/* This is needed to prevent blocking when allocating memory in
@@ -276,6 +277,7 @@ int homa_sock_init(struct homa_sock *hsk)
 error:
 	hsk->shutdown = true;
 	hsk->homa = NULL;
+	hsk->buffer_pool = NULL;
 	homa_pool_free(buffer_pool);
 	return result;
 }
@@ -401,9 +403,11 @@ void homa_sock_shutdown(struct homa_sock *hsk)
 }
 
 /**
- * homa_sock_destroy() - Release all of the internal resources associated
- * with a socket; is invoked at time when that is safe (i.e., all references
- * on the socket have been dropped).
+ * homa_sock_destroy() - Release most of the internal resources associated
+ * with a socket; invoked by sk_common_release. Other threads (e.g.
+ * homa_timer or homa_softirq) may still hold references to the socket, so
+ * anything they could use (such as the buffer pool) must not be freed
+ * here; that happens in homa_sock_destruct.
  * @sk:       Socket to destroy.
  */
 void homa_sock_destroy(struct sock *sk)
@@ -436,7 +440,20 @@ void homa_sock_destroy(struct sock *sk)
 #endif /* See strip.py */
 	}
 
-	WARN_ON_ONCE(refcount_read(&hsk->sock.sk_wmem_alloc) != 1);
+	if (hsk->buffer_pool)
+		homa_pool_shutdown(hsk->buffer_pool);
+	tt_record1("Finished destroying socket %d", hsk->port);
+}
+
+/**
+ * homa_sock_destruct() - Invoked as sk->sk_destruct once the last
+ * reference to a socket has been released; frees the buffer pool.
+ * @sk:       Socket being freed.
+ */
+void homa_sock_destruct(struct sock *sk)
+{
+	struct homa_sock *hsk = homa_sk(sk);
+
 #ifdef __UNIT_TEST__
 	{
 		u64 tx_memory = refcount_read(&hsk->sock.sk_wmem_alloc);
@@ -451,7 +468,10 @@ void homa_sock_destroy(struct sock *sk)
 		homa_pool_free(hsk->buffer_pool);
 		hsk->buffer_pool = NULL;
 	}
-	tt_record1("Finished destroying socket %d", hsk->port);
+	if (sk->sk_family == AF_INET6)
+		inet6_sock_destruct(sk);
+	else
+		inet_sock_destruct(sk);
 }
 
 /**

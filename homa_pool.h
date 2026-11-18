@@ -126,6 +126,7 @@ int      homa_pool_free_bufs(struct homa_pool *pool, int num_buffers,
 void     homa_pool_lock_slow(struct homa_pool *pool);
 int      homa_pool_set_region(struct homa_pool *pool, void __user *region,
 			      u64 region_size);
+void     homa_pool_shutdown(struct homa_pool *pool);
 void     homa_pool_wakeup_rpc(struct homa_rpc *rpc);
 void     homa_pool_wakeup_worker(struct work_struct *work);
 

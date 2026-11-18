@@ -361,6 +361,7 @@ void               homa_sock_lock_slow(struct homa_sock *hsk);
 int                homa_sock_bind(struct homa_net *hnet, struct homa_sock *hsk,
 				  u16 port);
 void               homa_sock_destroy(struct sock *sk);
+void               homa_sock_destruct(struct sock *sk);
 void               homa_socktab_fill_scan(struct homa_socktab_scan *scan);
 struct homa_sock  *homa_sock_find(struct homa_net *hnet, u16 port);
 int                homa_sock_init(struct homa_sock *hsk);

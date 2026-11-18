@@ -2,6 +2,7 @@
 
 #include "homa_impl.h"
 #include "homa_interest.h"
+#include "homa_pool.h"
 #include "homa_sock.h"
 #define KSELFTEST_NOT_MAIN 1
 #include "kselftest_harness.h"
@@ -39,6 +40,21 @@ static void nospace_hook(char *id)
 	if (strcmp(id, "prepare_to_wait") != 0)
 		return;
 	clear_bit(HOMA_SOCK_NOSPACE, &hook_hsk->flags);
+}
+
+/* Simulates close() on another core while homa_rpc_reap is freeing RPCs
+ * that it has already removed from dead_rpcs.
+ */
+static void destroy_hook(char *id)
+{
+	struct homa_sock *hsk = hook_hsk;
+
+	if (strcmp(id, "spin_lock") != 0 || !hsk)
+		return;
+	if (!list_empty(&hsk->dead_rpcs) || mock_is_locked(&hsk->lock))
+		return;
+	hook_hsk = NULL;
+	homa_sock_destroy(&hsk->sock);
 }
 
 static void init_scan(struct homa_socktab_scan *scan,
@@ -99,6 +115,9 @@ TEST_F(homa_sock, homa_socktab_destroy)
 
 	homa_socktab_destroy(self->homa.socktab, NULL);
 	EXPECT_EQ(1, hsk3.shutdown);
+	mock_sock_destruct(&hsk1);
+	mock_sock_destruct(&hsk2);
+	mock_sock_destruct(&hsk3);
 }
 
 TEST_F(homa_sock, homa_socktab_start_scan)
@@ -535,6 +554,30 @@ TEST_F(homa_sock, homa_sock_destroy__unlink_socket)
 	homa_sock_destroy(&hsk.sock);
 	EXPECT_EQ(NULL, homa_sock_find(self->hnet, port));
 	EXPECT_EQ(NULL, hsk.slink);
+	mock_sock_destruct(&hsk);
+}
+
+TEST_F(homa_sock, homa_sock_destroy__concurrent_reap)
+{
+	struct homa_pool *pool = self->hsk.buffer_pool;
+	struct homa_rpc *crpc;
+
+	crpc = unit_client_rpc(&self->hsk, UNIT_RCVD_ONE_PKT, self->client_ip,
+			       self->server_ip, self->server_port,
+			       self->client_id, 1000, 150000);
+	ASSERT_NE(NULL, crpc);
+	homa_rpc_end(crpc);
+	homa_sock_shutdown(&self->hsk);
+
+	/* homa_sock_destroy runs after homa_rpc_reap has removed crpc
+	 * from dead_rpcs but before it frees crpc's buffers.
+	 */
+	hook_hsk = &self->hsk;
+	unit_hook_register(destroy_hook);
+	homa_rpc_reap(&self->hsk);
+	EXPECT_EQ(NULL, hook_hsk);
+	EXPECT_EQ(pool, self->hsk.buffer_pool);
+	EXPECT_EQ(100 * HOMA_BPAGE_SIZE, homa_pool_avail_bytes(pool));
 }
 
 TEST_F(homa_sock, homa_sock_bind)

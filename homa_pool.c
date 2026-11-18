@@ -129,9 +129,24 @@ error:
 }
 
 /**
+ * homa_pool_shutdown() - Ensure that the pool's wakeup work isn't running
+ * and won't run again. The pool can still be used to free buffers.
+ * Must be called in a context that can sleep.
+ * @pool: Pool to shut down.
+ */
+void homa_pool_shutdown(struct homa_pool *pool)
+{
+	homa_pool_lock(pool);
+	pool->shutdown = true;
+	homa_pool_unlock(pool);
+	cancel_work_sync(&pool->wakeup_work);
+}
+
+/**
  * homa_pool_free() - Destructor for homa_pool. After this method
  * returns, the object should not be used (it will be freed here).
- * Must be called in a context that can sleep.
+ * If the pool's wakeup work could ever have been scheduled, the
+ * caller must have invoked homa_pool_shutdown first.
  * @pool: Pool to destroy.
  */
 void homa_pool_free(struct homa_pool *pool)
@@ -139,12 +154,6 @@ void homa_pool_free(struct homa_pool *pool)
 #ifdef __UNIT_TEST__
 	mock_free_pool(pool);
 #endif /* __UNIT_TEST__ */
-
-	/* Ensure the wakeup work isn't running and won't run again. */
-	homa_pool_lock(pool);
-	pool->shutdown = true;
-	homa_pool_unlock(pool);
-	cancel_work_sync(&pool->wakeup_work);
 
 	if (homa_pool_exists(pool)) {
 		kfree(pool->free_stack);
