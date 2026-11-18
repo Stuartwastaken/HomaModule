@@ -1661,6 +1661,19 @@ TEST_F(homa_incoming, homa_data_pkt__initialize_msgin)
 	EXPECT_EQ(1600, crpc->msgin.granted);
 #endif /* See strip.py */
 }
+TEST_F(homa_incoming, homa_data_pkt__initialize_msgin_fails)
+{
+	struct homa_rpc *crpc = unit_client_rpc(&self->hsk,
+			UNIT_OUTGOING, self->client_ip, self->server_ip,
+			self->server_port, self->client_id, 1000, 1600);
+
+	ASSERT_NE(NULL, crpc);
+	self->data.msg_length = htonl(HOMA_MAX_MESSAGE_LENGTH + 1);
+	homa_data_pkt(mock_skb_alloc(self->server_ip, self->client_ip,
+				     &self->data.common, 1400, 0), crpc);
+	EXPECT_EQ(-EINVAL, crpc->error);
+	EXPECT_EQ(1, unit_list_length(&self->hsk.ready_rpcs));
+}
 TEST_F(homa_incoming, homa_data_pkt__wrong_server_rpc_state)
 {
 	struct homa_rpc *srpc = unit_server_rpc(&self->hsk, UNIT_OUTGOING,
@@ -1689,6 +1702,7 @@ TEST_F(homa_incoming, homa_data_pkt__no_buffer_pool)
 				     &self->data.common, 1400, 0), crpc);
 	EXPECT_EQ(0, skb_queue_len(&crpc->msgin.packets));
 	EXPECT_EQ(SKB_DROP_REASON_NOMEM, mock_drop_reasons[0]);
+	EXPECT_EQ(-ENOMEM, crpc->error);
 }
 TEST_F(homa_incoming, homa_data_pkt__no_buffers)
 {
