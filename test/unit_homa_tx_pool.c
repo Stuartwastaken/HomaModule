@@ -69,6 +69,7 @@ TEST_F(homa_tx_pool, homa_tx_pool_init__success)
 	EXPECT_EQ(0, get_tx_pool_core(6)->nid);
 	EXPECT_EQ(1, get_tx_pool_core(7)->nid);
 	EXPECT_EQ(4, self->homa.max_numa);
+	EXPECT_EQ(1000, self->homa.tx_page_frees_per_sec);
 }
 TEST_F(homa_tx_pool, homa_tx_pool_init__kmalloc_failure)
 {
